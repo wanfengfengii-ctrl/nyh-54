@@ -49,64 +49,73 @@ function seededRandom(seed: number): () => number {
 function generateHeightMap(heightDiff: number, seed: number): number[][] {
   const random = seededRandom(seed)
   const heightMap: number[][] = []
+  const maxHeight = PARAMS_RANGES.heightDiff.max
   
   for (let y = 0; y < GRID_HEIGHT; y++) {
     const row: number[] = []
     for (let x = 0; x < GRID_WIDTH; x++) {
       let h = 0
       if (heightDiff > 0) {
-        const xFactor = Math.sin(x * 0.05) * 0.3 + 0.7
-        const yFactor = Math.cos(y * 0.08) * 0.2 + 0.8
-        const noise = (random() - 0.5) * 0.5
-        h = heightDiff * xFactor * yFactor * (0.5 + noise + 0.5)
+        const pattern = Math.sin(x * 0.08 + y * 0.05) * 0.5 + 0.5
+        const noise = (random() - 0.5) * 0.4
+        h = heightDiff * pattern * (0.6 + noise + 0.4)
         h = Math.max(0, Math.min(heightDiff, h))
       }
-      row.push(h)
+      row.push(h / maxHeight)
     }
     heightMap.push(row)
   }
   return heightMap
 }
 
-function applyRolling(
-  inkMap: number[][],
+function transferInk(
+  paperInk: number[][],
+  heightMap: number[][],
   pressure: number,
   viscosity: number,
   rollingCount: number,
-  heightMap: number[][],
   seed: number
 ): number[][] {
   const random = seededRandom(seed + 1000)
-  const result: number[][] = inkMap.map(row => [...row])
+  const result: number[][] = paperInk.map(row => [...row])
   
   const pressureFactor = pressure / 100
   const viscosityFactor = viscosity / 100
-  const transferEfficiency = 0.3 + pressureFactor * 0.5 - viscosityFactor * 0.2
-  const spreadFactor = 0.05 + (1 - viscosityFactor) * 0.15
+  
+  const baseCoverage = 0.2 + pressureFactor * 0.7 - viscosityFactor * 0.15
+  const efficiency = 0.55 + pressureFactor * 0.35 - viscosityFactor * 0.25
 
   for (let pass = 0; pass < rollingCount; pass++) {
-    const passOffset = pass * 3
-    const tempMap: number[][] = result.map(row => [...row])
+    const passProgress = (pass + 1) / rollingCount
+    const passFactor = Math.min(1, passProgress * 1.2)
 
     for (let y = 0; y < GRID_HEIGHT; y++) {
       for (let x = 0; x < GRID_WIDTH; x++) {
-        const heightFactor = 1 - (heightMap[y][x] / 50) * 0.6
-        const localPressure = pressureFactor * heightFactor
-        const noise = (random() - 0.5) * 0.1
+        if (result[y][x] >= 0.95) continue
 
-        const sourceX = (x + passOffset) % GRID_WIDTH
-        const sourceY = y
-        const availableInk = tempMap[sourceY][sourceX]
-        
-        const transferAmount = availableInk * transferEfficiency * localPressure * (0.8 + noise)
-        result[y][x] = Math.min(1, result[y][x] + transferAmount)
-        
-        if (spreadFactor > 0 && result[y][x] > 0.3) {
-          const spreadAmount = result[y][x] * spreadFactor * (1 - viscosityFactor * 0.5)
-          if (x > 0) result[y][x - 1] = Math.min(1, result[y][x - 1] + spreadAmount * 0.25)
-          if (x < GRID_WIDTH - 1) result[y][x + 1] = Math.min(1, result[y][x + 1] + spreadAmount * 0.25)
-          if (y > 0) result[y - 1][x] = Math.min(1, result[y - 1][x] + spreadAmount * 0.25)
-          if (y < GRID_HEIGHT - 1) result[y + 1][x] = Math.min(1, result[y + 1][x] + spreadAmount * 0.25)
+        const heightVal = heightMap[y][x]
+        const heightPenalty = 1 - heightVal * 0.8
+
+        const randomThreshold = 1 - baseCoverage * passFactor * efficiency * heightPenalty
+        const rand = random()
+
+        if (rand > randomThreshold) {
+          const baseAmount = 0.2 + pressureFactor * 0.5
+          const heightBonus = 0.3 + heightVal * 0.5
+          const noise = (random() - 0.5) * 0.25
+          
+          let inkAmount = baseAmount * heightBonus * (0.85 + noise)
+          inkAmount = Math.max(0, Math.min(1, inkAmount))
+          
+          result[y][x] = Math.min(1, result[y][x] + inkAmount * 0.6)
+        }
+
+        if (result[y][x] > 0.4 && random() > 0.6) {
+          const spread = result[y][x] * 0.1 * (1 - viscosityFactor * 0.4)
+          if (x > 0) result[y][x - 1] = Math.min(1, result[y][x - 1] + spread * 0.3)
+          if (x < GRID_WIDTH - 1) result[y][x + 1] = Math.min(1, result[y][x + 1] + spread * 0.3)
+          if (y > 0) result[y - 1][x] = Math.min(1, result[y - 1][x] + spread * 0.3)
+          if (y < GRID_HEIGHT - 1) result[y + 1][x] = Math.min(1, result[y + 1][x] + spread * 0.3)
         }
       }
     }
@@ -115,32 +124,17 @@ function applyRolling(
   return result
 }
 
-function generateInitialInkMap(viscosity: number, pressure: number, seed: number): number[][] {
-  const random = seededRandom(seed + 500)
-  const inkMap: number[][] = []
-  const baseAmount = 0.4 + (pressure / 100) * 0.3 - (viscosity / 100) * 0.1
-
-  for (let y = 0; y < GRID_HEIGHT; y++) {
-    const row: number[] = []
-    for (let x = 0; x < GRID_WIDTH; x++) {
-      const edgeFactor = 0.8 + Math.sin(x * 0.1 + y * 0.05) * 0.15
-      const noise = (random() - 0.5) * 0.4
-      let amount = baseAmount * edgeFactor * (0.7 + noise + 0.3)
-      amount = Math.max(0, Math.min(1, amount))
-      row.push(amount)
-    }
-    inkMap.push(row)
-  }
-
-  return inkMap
-}
-
 export function runSimulation(params: PrintParams): SimulationResult {
   const seed = Math.floor(params.viscosity * 1000 + params.pressure * 100 + params.rollingCount * 10 + params.heightDiff * 7)
   
   const heightMap = generateHeightMap(params.heightDiff, seed)
-  let inkMap = generateInitialInkMap(params.viscosity, params.pressure, seed)
-  inkMap = applyRolling(inkMap, params.pressure, params.viscosity, params.rollingCount, heightMap, seed)
+
+  const paperInk: number[][] = []
+  for (let y = 0; y < GRID_HEIGHT; y++) {
+    paperInk.push(new Array(GRID_WIDTH).fill(0))
+  }
+  
+  const inkMap = transferInk(paperInk, heightMap, params.pressure, params.viscosity, params.rollingCount, seed)
 
   const coverageMap: number[][] = []
   let totalInk = 0

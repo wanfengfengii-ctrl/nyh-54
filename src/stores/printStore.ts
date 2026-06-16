@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { PrintParams, SimulationResult, SavedScheme, ValidationResult } from '../types'
-import { DEFAULT_PARAMS } from '../types'
+import { DEFAULT_PARAMS, PARAMS_RANGES } from '../types'
 import { runSimulation, validateParams, generateSchemeId } from '../utils/simulation'
 
 export const usePrintStore = defineStore('print', () => {
@@ -10,6 +10,7 @@ export const usePrintStore = defineStore('print', () => {
   const savedSchemes = ref<SavedScheme[]>([])
   const compareSchemes = ref<string[]>([])
   const lastValidation = ref<ValidationResult>({ valid: true, errors: [] })
+  const inputErrors = ref<Partial<Record<keyof PrintParams, string>>>({})
 
   const lastParams = ref<PrintParams | null>(null)
 
@@ -23,8 +24,12 @@ export const usePrintStore = defineStore('print', () => {
     )
   })
 
-  const paramsValid = computed(() => lastValidation.value.valid)
-  const validationErrors = computed(() => lastValidation.value.errors)
+  const paramsValid = computed(() => lastValidation.value.valid && Object.keys(inputErrors.value).length === 0)
+  const validationErrors = computed(() => {
+    const all = [...lastValidation.value.errors]
+    Object.values(inputErrors.value).forEach(e => e && all.push(e))
+    return all
+  })
 
   const compareSchemeData = computed(() => {
     return compareSchemes.value
@@ -32,7 +37,40 @@ export const usePrintStore = defineStore('print', () => {
       .filter((s): s is SavedScheme => s !== undefined)
   })
 
+  function validateSingleParam(key: keyof PrintParams, value: number): string | null {
+    switch (key) {
+      case 'viscosity':
+        if (isNaN(value)) return '油墨黏度必须为有效数字'
+        if (value <= 0) return `油墨黏度必须大于 0，当前输入 ${value}`
+        if (value > PARAMS_RANGES.viscosity.max) return `油墨黏度不能超过 ${PARAMS_RANGES.viscosity.max} cP，当前输入 ${value}`
+        return null
+      case 'pressure':
+        if (isNaN(value)) return '滚筒压力必须为有效数字'
+        if (value <= 0) return `滚筒压力必须大于 0，当前输入 ${value}`
+        if (value > PARAMS_RANGES.pressure.max) return `滚筒压力不能超过 ${PARAMS_RANGES.pressure.max} MPa，当前输入 ${value}`
+        return null
+      case 'rollingCount':
+        if (isNaN(value)) return '滚动次数必须为有效数字'
+        if (!Number.isInteger(value)) return '滚动次数必须为整数'
+        if (value <= 0) return `滚动次数必须大于 0，当前输入 ${value}`
+        if (value > PARAMS_RANGES.rollingCount.max) return `滚动次数不能超过 ${PARAMS_RANGES.rollingCount.max} 次，当前输入 ${value}`
+        return null
+      case 'heightDiff':
+        if (isNaN(value)) return '字面高度差必须为有效数字'
+        if (value < 0) return `字面高度差不能为负数，当前输入 ${value}`
+        if (value > PARAMS_RANGES.heightDiff.max) return `字面高度差不能超过 ${PARAMS_RANGES.heightDiff.max} μm，当前输入 ${value}`
+        return null
+    }
+  }
+
   function updateParam(key: keyof PrintParams, value: number) {
+    const err = validateSingleParam(key, value)
+    if (err) {
+      inputErrors.value[key] = err
+      currentResult.value = null
+      return
+    }
+    delete inputErrors.value[key]
     params.value[key] = value
     lastValidation.value = validateParams(params.value)
     if (lastValidation.value.valid) {
@@ -40,6 +78,17 @@ export const usePrintStore = defineStore('print', () => {
     } else {
       currentResult.value = null
     }
+  }
+
+  function invalidateParam(key: keyof PrintParams) {
+    inputErrors.value[key] = key === 'viscosity'
+      ? '油墨黏度必须为有效数字'
+      : key === 'pressure'
+        ? '滚筒压力必须为有效数字'
+        : key === 'rollingCount'
+          ? '滚动次数必须为有效数字'
+          : '字面高度差必须为有效数字'
+    currentResult.value = null
   }
 
   function setParams(newParams: Partial<PrintParams>) {
@@ -54,6 +103,7 @@ export const usePrintStore = defineStore('print', () => {
 
   function resetParams() {
     params.value = { ...DEFAULT_PARAMS }
+    inputErrors.value = {}
     lastValidation.value = validateParams(params.value)
     simulate()
   }
@@ -135,22 +185,28 @@ export const usePrintStore = defineStore('print', () => {
         result = runSimulation(tempParams)
       }
 
+      let schemeId = imported.id || generateSchemeId()
+      let schemeName = imported.name || `导入方案 ${new Date().toLocaleString()}`
+      let message = '方案导入成功'
+
+      const idExists = savedSchemes.value.some(s => s.id === schemeId)
+      if (idExists) {
+        schemeId = generateSchemeId()
+        schemeName = `${schemeName} (导入副本)`
+        message = '检测到ID冲突，已以新ID创建副本导入（原方案未被覆盖）'
+      }
+
       const scheme: SavedScheme = {
-        id: imported.id || generateSchemeId(),
-        name: imported.name || `导入方案 ${new Date().toLocaleString()}`,
+        id: schemeId,
+        name: schemeName,
         params: tempParams,
         result,
         createdAt: imported.createdAt || Date.now()
       }
 
-      const existingIdx = savedSchemes.value.findIndex(s => s.id === scheme.id)
-      if (existingIdx >= 0) {
-        savedSchemes.value[existingIdx] = scheme
-      } else {
-        savedSchemes.value.push(scheme)
-      }
+      savedSchemes.value.push(scheme)
       persistSchemes()
-      return { success: true, message: '方案导入成功' }
+      return { success: true, message }
     } catch (e) {
       return { success: false, message: 'JSON 解析失败，请检查文件格式' }
     }
@@ -202,11 +258,13 @@ export const usePrintStore = defineStore('print', () => {
     savedSchemes,
     compareSchemes,
     lastValidation,
+    inputErrors,
     paramsValid,
     validationErrors,
     shouldRecompute,
     compareSchemeData,
     updateParam,
+    invalidateParam,
     setParams,
     resetParams,
     simulate,

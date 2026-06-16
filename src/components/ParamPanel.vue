@@ -68,30 +68,43 @@ function onInputChange(key: keyof PrintParams, event: Event) {
   const target = event.target as HTMLInputElement
   const raw = target.value
   inputValues.value[key] = raw
-  
-  const value = parseFloat(raw)
-  if (!isNaN(value)) {
-    const range = PARAMS_RANGES[key]
-    const clamped = Math.max(range.min, Math.min(range.max, value))
-    store.updateParam(key, clamped)
-    if (clamped !== value) {
-      inputValues.value[key] = String(clamped)
-    }
+
+  if (raw === '' || raw === '-') {
+    store.invalidateParam(key)
+    return
   }
+
+  const value = parseFloat(raw)
+  if (isNaN(value)) {
+    store.invalidateParam(key)
+    return
+  }
+
+  store.updateParam(key, value)
 }
 
 function onInputBlur(key: keyof PrintParams) {
-  const value = parseFloat(inputValues.value[key])
-  const range = PARAMS_RANGES[key]
-  
-  if (isNaN(value)) {
+  const raw = inputValues.value[key]
+
+  if (raw === '' || raw === '-') {
     inputValues.value[key] = String(store.params[key])
+    store.updateParam(key, store.params[key])
     return
   }
-  
-  const clamped = Math.max(range.min, Math.min(range.max, value))
-  inputValues.value[key] = String(clamped)
-  store.updateParam(key, clamped)
+
+  const value = parseFloat(raw)
+  if (isNaN(value)) {
+    inputValues.value[key] = String(store.params[key])
+    store.updateParam(key, store.params[key])
+    return
+  }
+
+  const range = PARAMS_RANGES[key]
+  if (value < range.min || value > range.max) {
+    return
+  }
+
+  store.updateParam(key, value)
 }
 
 function handleReset() {
@@ -108,6 +121,7 @@ function getSliderFillPercent(key: keyof PrintParams) {
 }
 
 function isParamError(key: keyof PrintParams) {
+  if (store.inputErrors[key]) return true
   return store.validationErrors.some(e => {
     if (key === 'viscosity') return e.includes('黏度')
     if (key === 'pressure') return e.includes('压力')
