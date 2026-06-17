@@ -600,12 +600,18 @@ async function onTemplateFileSelected(event: Event) {
   try {
     const text = await file.text()
     const result = store.importTemplate(text)
-    if (result.success) {
-      importSuccess.value = result.message
+    if ('success' in result) {
+      if (result.success) {
+        importSuccess.value = result.message
+        templateNameInput.value = store.activeTemplate?.name || ''
+        setTimeout(() => importSuccess.value = '', 3000)
+      } else {
+        importError.value = result.message
+      }
+    } else {
+      importSuccess.value = '模板导入成功'
       templateNameInput.value = store.activeTemplate?.name || ''
       setTimeout(() => importSuccess.value = '', 3000)
-    } else {
-      importError.value = result.message
     }
   } catch (e) {
     importError.value = '文件读取失败'
