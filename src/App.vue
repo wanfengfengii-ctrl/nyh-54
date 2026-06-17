@@ -11,10 +11,11 @@ import TemplateEditor from './components/TemplateEditor.vue'
 import ParamHistory from './components/ParamHistory.vue'
 import BatchExperiment from './components/BatchExperiment.vue'
 import AgingAnalysis from './components/AgingAnalysis.vue'
+import MultiMachineCenter from './components/MultiMachineCenter.vue'
 
 const store = usePrintStore()
 type LeftTabType = 'params' | 'template' | 'history'
-type CenterTabType = 'canvas' | 'charts' | 'experiment' | 'aging'
+type CenterTabType = 'canvas' | 'charts' | 'experiment' | 'aging' | 'multimachine'
 type RightTabType = 'risk' | 'scheme'
 
 const leftTab = ref<LeftTabType>('params')
@@ -102,6 +103,21 @@ watch(() => store.params, () => {
               {{ store.agingAnalyses.length }}
             </span>
           </button>
+          <button
+            class="center-tab"
+            :class="{ active: centerTab === 'multimachine' }"
+            @click="centerTab = 'multimachine'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>多机台中心</span>
+            <span v-if="store.machines.length" class="tab-badge" style="background: #059669;">
+              {{ store.machines.length }}
+            </span>
+          </button>
         </div>
       </div>
     </header>
@@ -176,6 +192,9 @@ watch(() => store.params, () => {
           <div v-show="centerTab === 'aging'" class="tab-content">
             <AgingAnalysis />
           </div>
+          <div v-show="centerTab === 'multimachine'" class="tab-content">
+            <MultiMachineCenter />
+          </div>
         </section>
 
         <aside class="right-panel">
@@ -245,6 +264,13 @@ watch(() => store.params, () => {
               <circle cx="12" cy="12" r="3" />
             </svg>
             <span>{{ store.agingAnalyses.length }} 老化</span>
+            <span class="sep">·</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>{{ store.machines.length }} 机台</span>
           </div>
         </div>
         <span class="footer-hint">基于 Vue3 + TypeScript + Pinia + Canvas + ECharts 构建</span>

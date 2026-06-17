@@ -322,3 +322,190 @@ export const AGING_SIMULATION_CONFIG = {
   maxSteps: 200,
   defaultStepInterval: 100
 } as const
+
+export type MachineStatus = 'running' | 'idle' | 'maintenance' | 'warning' | 'offline'
+
+export interface MachineConfig {
+  id: string
+  name: string
+  params: PrintParams
+  envParams: EnvironmentParams
+  status: MachineStatus
+  capacity: number
+  allocatedCapacity: number
+  rollerWear: number
+  totalRunCount: number
+  lastMaintenanceTime: number
+  createdAt: number
+  color: string
+  effectiveCapacity?: number
+}
+
+export interface BatchQualityRecord {
+  batchId: string
+  machineId: string
+  machineName: string
+  sequenceIndex: number
+  params: PrintParams
+  envParams: EnvironmentParams
+  result: SimulationResult
+  riskScore: number
+  timestamp: number
+  qualityGrade: 'A' | 'B' | 'C' | 'D'
+}
+
+export interface AnomalySource {
+  id: string
+  batchId: string
+  machineId: string
+  machineName: string
+  anomalyType: 'coverage_drop' | 'uniformity_drop' | 'risk_spike' | 'parameter_drift' | 'wear_degradation'
+  severity: 'mild' | 'moderate' | 'severe'
+  description: string
+  rootCause: string
+  affectedMetric: string
+  affectedValue: number
+  expectedValue: number
+  deviation: number
+  suggestedFix: string
+  confidence: number
+}
+
+export interface MachineMetrics {
+  machineId: string
+  machineName: string
+  avgCoverage: number
+  avgUniformity: number
+  avgRiskScore: number
+  coverageStdDev: number
+  uniformityStdDev: number
+  qualityDistribution: { A: number; B: number; C: number; D: number }
+  trendSlope: number
+  anomalyCount: number
+  effectiveCapacity: number
+  color: string
+}
+
+export interface CrossMachineComparison {
+  id: string
+  timestamp: number
+  machineMetrics: MachineMetrics[]
+  bestMachine: { id: string; name: string; reason: string }
+  worstMachine: { id: string; name: string; reason: string }
+  coverageVariance: number
+  uniformityVariance: number
+  riskVariance: number
+  correlations: { machineA: string; machineB: string; metric: string; value: number }[]
+  insights: string[]
+}
+
+export interface OrderInfo {
+  id: string
+  name: string
+  totalQuantity: number
+  completedQuantity: number
+  requiredCoverage: number
+  requiredUniformity: number
+  deadline: number
+  priority: 'high' | 'medium' | 'low'
+  assignedMachines: string[]
+  createdAt: number
+  status: 'pending' | 'in_progress' | 'at_risk' | 'completed' | 'overdue'
+}
+
+export interface DeliveryRiskAssessment {
+  orderId: string
+  orderName: string
+  overallRisk: 'low' | 'medium' | 'high' | 'critical'
+  riskScore: number
+  progressPercent: number
+  estimatedCompletionTime: number
+  deadline: number
+  onTimeProbability: number
+  riskFactors: {
+    factor: string
+    impact: number
+    description: string
+    mitigation: string
+  }[]
+  recommendations: string[]
+}
+
+export interface ProductionOptimizationSuggestion {
+  id: string
+  priority: 'high' | 'medium' | 'low'
+  category: 'capacity' | 'quality' | 'maintenance' | 'parameter' | 'allocation'
+  title: string
+  description: string
+  currentStatus: string
+  suggestedChange: string
+  expectedImprovement: string
+  affectedMachines: string[]
+  effortLevel: 'low' | 'medium' | 'high'
+}
+
+export interface MaintenanceScheduleItem {
+  id: string
+  machineId: string
+  machineName: string
+  type: 'preventive' | 'corrective' | 'emergency'
+  priority: 'high' | 'medium' | 'low'
+  title: string
+  description: string
+  suggestedTime: number
+  estimatedDuration: number
+  reason: string
+  impactIfDelayed: string
+  parts?: string[]
+}
+
+export interface MultiMachineSimulationResult {
+  id: string
+  name: string
+  machineIds: string[]
+  batches: BatchQualityRecord[]
+  anomalies: AnomalySource[]
+  crossMachineComparison: CrossMachineComparison
+  deliveryRisks: DeliveryRiskAssessment[]
+  optimizations: ProductionOptimizationSuggestion[]
+  maintenanceSchedule: MaintenanceScheduleItem[]
+  summary: {
+    totalBatches: number
+    avgCoverage: number
+    avgUniformity: number
+    avgRiskScore: number
+    anomalyCount: number
+    qualityDistribution: { A: number; B: number; C: number; D: number }
+  }
+  startedAt: number
+  completedAt: number
+}
+
+export const MACHINE_COLORS = [
+  '#2563eb', '#059669', '#d97706', '#7c3aed', '#dc2626',
+  '#0891b2', '#4f46e5', '#c026d3', '#65a30d', '#ea580c'
+] as const
+
+export const DEFAULT_MACHINE_CONFIG: Omit<MachineConfig, 'id' | 'name' | 'createdAt' | 'color'> = {
+  params: { ...DEFAULT_PARAMS },
+  envParams: { ...DEFAULT_ENV_PARAMS },
+  status: 'idle',
+  capacity: 100,
+  allocatedCapacity: 0,
+  rollerWear: 0,
+  totalRunCount: 0,
+  lastMaintenanceTime: Date.now()
+}
+
+export const QUALITY_GRADE_THRESHOLDS = {
+  A: { minCoverage: 65, minUniformity: 80, maxRisk: 25 },
+  B: { minCoverage: 50, minUniformity: 65, maxRisk: 45 },
+  C: { minCoverage: 35, minUniformity: 50, maxRisk: 65 },
+  D: { minCoverage: 0, minUniformity: 0, maxRisk: 100 }
+} as const
+
+export const MACHINE_CAPACITY_RANGES = {
+  capacity: { min: 10, max: 200, step: 10, unit: '件/批' },
+  rollerWear: { min: 0, max: 100, step: 1, unit: '%' },
+  totalRunCount: { min: 0, max: 50000, step: 500, unit: '次' }
+} as const
