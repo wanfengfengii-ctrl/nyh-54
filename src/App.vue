@@ -185,7 +185,7 @@ watch(() => store.params, () => {
                 <polyline points="7 3 7 8 15 8" />
               </svg>
               方案管理
-              <span v-if="store.schemes.length" class="mini-badge">{{ store.schemes.length }}</span>
+              <span v-if="store.savedSchemes.length" class="mini-badge">{{ store.savedSchemes.length }}</span>
             </button>
           </div>
 

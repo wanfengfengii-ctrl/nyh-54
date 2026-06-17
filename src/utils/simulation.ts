@@ -291,7 +291,7 @@ function thresholdToCoverage(thickness: number): number {
   return ((thickness - 0.05) / 0.9) * 100
 }
 
-function generateDetailedRiskAnalysis(
+export function generateDetailedRiskAnalysis(
   params: PrintParams,
   coverage: number,
   uniformity: number,
@@ -374,15 +374,41 @@ function generateDetailedRiskAnalysis(
     suggestions.push('当前参数配置良好，可在此基础上做微小调整以进一步优化')
   }
 
+  const coverageRecommendation = coverageRisk > 50
+    ? (coverage < COVERAGE_THRESHOLDS.optimalMin
+        ? '增加滚筒压力或滚动次数'
+        : '降低黏度或减小滚筒压力')
+    : '当前覆盖率处于较优区间'
+
+  const uniformityRecommendation = uniformityRisk > 50
+    ? '增加滚动次数并微调黏度至中间区间'
+    : '均匀度表现良好'
+
+  const smearingRecommendation = smearingRisk > 50
+    ? '降低压力或增加油墨黏度'
+    : '糊版风险较低'
+
+  const missingInkRecommendation = missingInkRisk > 50
+    ? '检查高区域局部高度设置，增加压力'
+    : '缺墨风险较低'
+
+  const heightDiffRecommendation = heightDifferenceRisk > 50
+    ? '减小字面高度差或优化模板布局'
+    : '高度差处于可接受范围'
+
+  const paramCompatRecommendation = parameterCompatibilityRisk > 40
+    ? '重新平衡黏度与压力的配比'
+    : '参数组合兼容性良好'
+
   return {
     overallRiskScore,
     riskBreakdown: {
-      coverageRisk: Math.round(coverageRisk),
-      uniformityRisk: Math.round(uniformityRisk),
-      smearingRisk: Math.round(smearingRisk),
-      missingInkRisk: Math.round(missingInkRisk),
-      heightDifferenceRisk: Math.round(heightDifferenceRisk),
-      parameterCompatibilityRisk: Math.round(parameterCompatibilityRisk)
+      coverageRisk: { score: Math.round(coverageRisk), recommendation: coverageRecommendation },
+      uniformityRisk: { score: Math.round(uniformityRisk), recommendation: uniformityRecommendation },
+      smearingRisk: { score: Math.round(smearingRisk), recommendation: smearingRecommendation },
+      missingInkRisk: { score: Math.round(missingInkRisk), recommendation: missingInkRecommendation },
+      heightDifferenceRisk: { score: Math.round(heightDifferenceRisk), recommendation: heightDiffRecommendation },
+      parameterCompatibilityRisk: { score: Math.round(parameterCompatibilityRisk), recommendation: paramCompatRecommendation }
     },
     regionalRisks,
     suggestions

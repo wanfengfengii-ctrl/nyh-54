@@ -22,15 +22,20 @@ export interface RiskRegion {
   description: string
 }
 
+export interface RiskDimension {
+  score: number
+  recommendation: string
+}
+
 export interface DetailedRiskAnalysis {
   overallRiskScore: number
   riskBreakdown: {
-    coverageRisk: number
-    uniformityRisk: number
-    smearingRisk: number
-    missingInkRisk: number
-    heightDifferenceRisk: number
-    parameterCompatibilityRisk: number
+    coverageRisk: RiskDimension
+    uniformityRisk: RiskDimension
+    smearingRisk: RiskDimension
+    missingInkRisk: RiskDimension
+    heightDifferenceRisk: RiskDimension
+    parameterCompatibilityRisk: RiskDimension
   }
   regionalRisks: RegionalRisk[]
   suggestions: string[]

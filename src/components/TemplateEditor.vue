@@ -16,6 +16,10 @@ const activeTool = ref<ShapeType | null>(null)
 const isDragging = ref(false)
 const dragStart = ref<{ x: number; y: number } | null>(null)
 const dragCurrent = ref<{ x: number; y: number } | null>(null)
+const freehandPoints = ref<{ x: number; y: number }[]>([])
+const showTextDialog = ref(false)
+const newTextContent = ref('')
+const textClickPos = ref<{ x: number; y: number } | null>(null)
 
 const CANVAS_W = 720
 const CANVAS_H = 480
@@ -94,36 +98,52 @@ function render() {
     }
   }
 
-  if (isDragging.value && dragStart.value && dragCurrent.value && activeTool.value) {
-    const x = Math.min(dragStart.value.x, dragCurrent.value.x)
-    const y = Math.min(dragStart.value.y, dragCurrent.value.y)
-    const w = Math.abs(dragCurrent.value.x - dragStart.value.x)
-    const h = Math.abs(dragCurrent.value.y - dragStart.value.y)
-
-    ctx.globalAlpha = 0.5
-    ctx.fillStyle = '#6366f1'
-    ctx.strokeStyle = '#4f46e5'
-    ctx.lineWidth = 2
-    ctx.setLineDash([4, 4])
-
-    if (activeTool.value === 'rectangle') {
-      ctx.fillRect(x, y, w, h)
-      ctx.strokeRect(x, y, w, h)
-    } else if (activeTool.value === 'circle' || activeTool.value === 'ellipse') {
+  if (isDragging.value && activeTool.value) {
+    if (activeTool.value === 'freehand' && freehandPoints.value.length > 1) {
+      ctx.globalAlpha = 0.5
+      ctx.fillStyle = '#6366f1'
+      ctx.strokeStyle = '#4f46e5'
+      ctx.lineWidth = 2
       ctx.beginPath()
-      const rx = w / 2
-      const ry = h / 2
-      if (activeTool.value === 'circle') {
-        const r = Math.min(rx, ry)
-        ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2)
-      } else {
-        ctx.ellipse(x + w / 2, y + h / 2, rx, ry, 0, 0, Math.PI * 2)
-      }
+      freehandPoints.value.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y)
+        else ctx.lineTo(p.x, p.y)
+      })
+      ctx.closePath()
       ctx.fill()
       ctx.stroke()
+      ctx.globalAlpha = 1
+    } else if (dragStart.value && dragCurrent.value) {
+      const x = Math.min(dragStart.value.x, dragCurrent.value.x)
+      const y = Math.min(dragStart.value.y, dragCurrent.value.y)
+      const w = Math.abs(dragCurrent.value.x - dragStart.value.x)
+      const h = Math.abs(dragCurrent.value.y - dragStart.value.y)
+
+      ctx.globalAlpha = 0.5
+      ctx.fillStyle = '#6366f1'
+      ctx.strokeStyle = '#4f46e5'
+      ctx.lineWidth = 2
+      ctx.setLineDash([4, 4])
+
+      if (activeTool.value === 'rectangle' || activeTool.value === 'text') {
+        ctx.fillRect(x, y, w, h)
+        ctx.strokeRect(x, y, w, h)
+      } else if (activeTool.value === 'circle' || activeTool.value === 'ellipse') {
+        ctx.beginPath()
+        const rx = w / 2
+        const ry = h / 2
+        if (activeTool.value === 'circle') {
+          const r = Math.min(rx, ry)
+          ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2)
+        } else {
+          ctx.ellipse(x + w / 2, y + h / 2, rx, ry, 0, 0, Math.PI * 2)
+        }
+        ctx.fill()
+        ctx.stroke()
+      }
+      ctx.setLineDash([])
+      ctx.globalAlpha = 1
     }
-    ctx.setLineDash([])
-    ctx.globalAlpha = 1
   }
 
   ctx.strokeStyle = '#94a3b8'
@@ -148,8 +168,18 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: PlateShape) {
 
   switch (shape.type) {
     case 'rectangle':
+      ctx.fillRect(x, y, w, h)
+      break
     case 'text':
       ctx.fillRect(x, y, w, h)
+      ctx.globalAlpha = 1
+      ctx.fillStyle = '#fff'
+      const fontSize = Math.max(12, Math.min(h * 0.6, 36))
+      ctx.font = `bold ${fontSize}px -apple-system, system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      const displayText = shape.text || shape.label || '文字'
+      ctx.fillText(displayText, cx, cy)
       break
     case 'circle': {
       const r = Math.min(w, h) / 2
@@ -261,10 +291,20 @@ function onMouseDown(e: MouseEvent) {
   if (!store.activeTemplate) return
   const pos = canvasToGrid(e)
 
+  if (activeTool.value === 'text') {
+    textClickPos.value = pos
+    newTextContent.value = ''
+    showTextDialog.value = true
+    return
+  }
+
   if (activeTool.value) {
     isDragging.value = true
     dragStart.value = pos
     dragCurrent.value = pos
+    if (activeTool.value === 'freehand') {
+      freehandPoints.value = [pos]
+    }
   } else {
     const gx = pos.x / SCALE_X
     const gy = pos.y / SCALE_Y
@@ -283,54 +323,146 @@ function onMouseDown(e: MouseEvent) {
 
 function onMouseMove(e: MouseEvent) {
   if (!isDragging.value) return
-  dragCurrent.value = canvasToGrid(e)
+  const pos = canvasToGrid(e)
+  if (activeTool.value === 'freehand') {
+    freehandPoints.value.push(pos)
+  } else {
+    dragCurrent.value = pos
+  }
   render()
 }
 
 function onMouseUp() {
-  if (!isDragging.value || !store.activeTemplate || !dragStart.value || !dragCurrent.value || !activeTool.value) {
+  if (!isDragging.value || !store.activeTemplate || !activeTool.value) {
     isDragging.value = false
     dragStart.value = null
     dragCurrent.value = null
-    return
-  }
-
-  const x1 = Math.min(dragStart.value.x, dragCurrent.value.x) / SCALE_X
-  const y1 = Math.min(dragStart.value.y, dragCurrent.value.y) / SCALE_Y
-  const x2 = Math.max(dragStart.value.x, dragCurrent.value.x) / SCALE_X
-  const y2 = Math.max(dragStart.value.y, dragCurrent.value.y) / SCALE_Y
-  const w = Math.max(2, x2 - x1)
-  const h = Math.max(2, y2 - y1)
-
-  if (w < 3 || h < 3) {
-    isDragging.value = false
-    dragStart.value = null
-    dragCurrent.value = null
-    activeTool.value = null
-    render()
+    freehandPoints.value = []
     return
   }
 
   const colors = ['#1e293b', '#334155', '#475569', '#3b82f6', '#059669', '#d97706', '#7c3aed', '#dc2626']
   const shapeCount = store.activeTemplate.shapes.length
+  const color = colors[shapeCount % colors.length]
 
-  store.addShape(store.activeTemplate.id, {
-    type: activeTool.value,
-    x: Math.round(x1 * 10) / 10,
-    y: Math.round(y1 * 10) / 10,
-    width: Math.round(w * 10) / 10,
-    height: Math.round(h * 10) / 10,
-    localHeight: 30,
-    rotation: 0,
-    color: colors[shapeCount % colors.length],
-    label: `形状 ${shapeCount + 1}`
-  })
+  if (activeTool.value === 'freehand') {
+    if (freehandPoints.value.length < 3) {
+      isDragging.value = false
+      freehandPoints.value = []
+      activeTool.value = null
+      render()
+      return
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const p of freehandPoints.value) {
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x)
+      maxY = Math.max(maxY, p.y)
+    }
+    const w = maxX - minX
+    const h = maxY - minY
+    if (w < 5 || h < 5) {
+      isDragging.value = false
+      freehandPoints.value = []
+      activeTool.value = null
+      render()
+      return
+    }
+    const points = freehandPoints.value.map(p => ({
+      x: (p.x - minX) / w,
+      y: (p.y - minY) / h
+    }))
+    store.addShape(store.activeTemplate.id, {
+      type: 'freehand',
+      x: Math.round((minX / SCALE_X) * 10) / 10,
+      y: Math.round((minY / SCALE_Y) * 10) / 10,
+      width: Math.round((w / SCALE_X) * 10) / 10,
+      height: Math.round((h / SCALE_Y) * 10) / 10,
+      localHeight: 30,
+      rotation: 0,
+      color,
+      label: `手绘 ${shapeCount + 1}`,
+      points
+    })
+  } else if (dragStart.value && dragCurrent.value) {
+    const x1 = Math.min(dragStart.value.x, dragCurrent.value.x) / SCALE_X
+    const y1 = Math.min(dragStart.value.y, dragCurrent.value.y) / SCALE_Y
+    const x2 = Math.max(dragStart.value.x, dragCurrent.value.x) / SCALE_X
+    const y2 = Math.max(dragStart.value.y, dragCurrent.value.y) / SCALE_Y
+    const w = Math.max(2, x2 - x1)
+    const h = Math.max(2, y2 - y1)
+
+    if (w < 3 || h < 3) {
+      isDragging.value = false
+      dragStart.value = null
+      dragCurrent.value = null
+      activeTool.value = null
+      render()
+      return
+    }
+
+    store.addShape(store.activeTemplate.id, {
+      type: activeTool.value,
+      x: Math.round(x1 * 10) / 10,
+      y: Math.round(y1 * 10) / 10,
+      width: Math.round(w * 10) / 10,
+      height: Math.round(h * 10) / 10,
+      localHeight: 30,
+      rotation: 0,
+      color,
+      label: activeTool.value === 'text' ? '文字' : `形状 ${shapeCount + 1}`,
+      text: activeTool.value === 'text' ? '文字' : undefined
+    })
+  }
 
   isDragging.value = false
   dragStart.value = null
   dragCurrent.value = null
+  freehandPoints.value = []
   activeTool.value = null
   render()
+}
+
+function confirmTextCreation() {
+  if (!store.activeTemplate || !textClickPos.value) return
+  const text = newTextContent.value.trim() || '文字'
+  const colors = ['#1e293b', '#334155', '#475569', '#3b82f6', '#059669', '#d97706', '#7c3aed', '#dc2626']
+  const shapeCount = store.activeTemplate.shapes.length
+  const color = colors[shapeCount % colors.length]
+  
+  const charWidth = 14
+  const textWidth = text.length * charWidth
+  const textHeight = 28
+  
+  const gx = textClickPos.value!.x / SCALE_X
+  const gy = textClickPos.value!.y / SCALE_Y
+  
+  store.addShape(store.activeTemplate.id, {
+    type: 'text',
+    x: Math.round((gx - textWidth / 2 / SCALE_X * 0) * 10) / 10,
+    y: Math.round((gy - textHeight / 2 / SCALE_Y * 0) * 10) / 10,
+    width: Math.max(15, textWidth / SCALE_X * 4),
+    height: Math.max(8, textHeight / SCALE_Y * 4),
+    localHeight: 30,
+    rotation: 0,
+    color,
+    label: text,
+    text
+  })
+  
+  showTextDialog.value = false
+  textClickPos.value = null
+  newTextContent.value = ''
+  activeTool.value = null
+  render()
+}
+
+function cancelTextCreation() {
+  showTextDialog.value = false
+  textClickPos.value = null
+  newTextContent.value = ''
+  activeTool.value = null
 }
 
 function updateSelectedShapeField<K extends keyof PlateShape>(key: K, value: PlateShape[K]) {
@@ -568,8 +700,33 @@ onMounted(() => {
               <polygon points="12,3 21,21 3,21" />
             </svg>
           </button>
+          <button
+            class="tool-btn"
+            :class="{ active: activeTool === 'freehand' }"
+            @click="activeTool = activeTool === 'freehand' ? null : 'freehand'"
+            title="自由手绘"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 19l7-7 3 3-7 7-3-3z" />
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+              <path d="M2 2l7.586 7.586" />
+              <circle cx="11" cy="11" r="2" />
+            </svg>
+          </button>
+          <button
+            class="tool-btn"
+            :class="{ active: activeTool === 'text' }"
+            @click="activeTool = activeTool === 'text' ? null : 'text'"
+            title="文本"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 7 4 4 20 4 20 7" />
+              <line x1="9" y1="20" x2="15" y2="20" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          </button>
         </div>
-        <div v-if="activeTool" class="hint">在画布上拖拽以绘制{{ activeTool === 'rectangle' ? '矩形' : activeTool === 'circle' ? '圆形' : activeTool === 'ellipse' ? '椭圆' : '多边形' }}</div>
+        <div v-if="activeTool" class="hint">在画布上{{ activeTool === 'text' ? '点击以添加文本' : activeTool === 'freehand' ? '拖拽进行手绘' : '拖拽以绘制' }}{{ activeTool === 'rectangle' ? '矩形' : activeTool === 'circle' ? '圆形' : activeTool === 'ellipse' ? '椭圆' : activeTool === 'polygon' ? '多边形' : activeTool === 'freehand' ? '形状' : activeTool === 'text' ? '' : '' }}</div>
       </div>
 
       <div class="canvas-wrapper">
@@ -599,6 +756,14 @@ onMounted(() => {
               type="text"
               :value="selectedShape.label"
               @input="(e: any) => updateSelectedShapeField('label', e.target.value)"
+              class="prop-input"
+            />
+          </label>
+          <label v-if="selectedShape.type === 'text'">文本内容
+            <input
+              type="text"
+              :value="selectedShape.text || ''"
+              @input="(e: any) => updateSelectedShapeField('text', e.target.value)"
               class="prop-input"
             />
           </label>
@@ -692,6 +857,29 @@ onMounted(() => {
       </svg>
       <p>未使用自定义模板</p>
       <span>选择预设或创建新模板以自定义印版字面形状与局部高度</span>
+    </div>
+
+    <div v-if="showTextDialog" class="dialog-overlay" @click.self="cancelTextCreation">
+      <div class="dialog-box">
+        <div class="dialog-title">添加文本</div>
+        <div class="dialog-body">
+          <label class="dialog-label">
+            文本内容
+            <input
+              v-model="newTextContent"
+              type="text"
+              class="dialog-input"
+              placeholder="请输入文本内容"
+              @keyup.enter="confirmTextCreation"
+              autofocus
+            />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" @click="cancelTextCreation">取消</button>
+          <button class="btn btn-primary" @click="confirmTextCreation">确定</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -1119,5 +1307,96 @@ onMounted(() => {
   font-size: 12px;
   color: #94a3b8;
   max-width: 400px;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog-box {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 400px;
+  max-width: 90vw;
+  overflow: hidden;
+}
+
+.dialog-title {
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dialog-body {
+  padding: 20px;
+}
+
+.dialog-label {
+  display: block;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 8px;
+}
+
+.dialog-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.dialog-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.dialog-actions {
+  padding: 12px 20px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
 }
 </style>

@@ -78,14 +78,16 @@ function riskLevelText(score: number): string {
 
 const regionalTypeStyle: Record<string, { bg: string; text: string; border: string }> = {
   smearing: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
-  missing: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-  uneven: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' }
+  missing_ink: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  uniformity: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  coverage: { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200' }
 }
 
 const regionalTypeLabel: Record<string, string> = {
   smearing: '糊版区',
-  missing: '缺墨区',
-  uneven: '不均区'
+  missing_ink: '缺墨区',
+  uniformity: '不均区',
+  coverage: '覆盖率'
 }
 </script>
 
@@ -211,39 +213,25 @@ const regionalTypeLabel: Record<string, string> = {
           </div>
           <div class="regional-grid">
             <div
-              v-for="(r, ri) in detailedAnalysis.regionalRisks.slice(0, 12)"
-              :key="ri"
+              v-for="(r, ri) in detailedAnalysis.regionalRisks.slice(0, 8)"
+              :key="r.id"
               class="regional-card"
-              :class="[regionalTypeStyle[r.type].bg, regionalTypeStyle[r.type].border]"
+              :class="[regionalTypeStyle[r.riskType].bg, regionalTypeStyle[r.riskType].border]"
             >
               <div class="reg-head">
-                <span class="reg-type" :class="regionalTypeStyle[r.type].text">
-                  {{ regionalTypeLabel[r.type] }}
+                <span class="reg-type" :class="regionalTypeStyle[r.riskType].text">
+                  {{ regionalTypeLabel[r.riskType] }}
                 </span>
-                <span class="reg-area">
-                  [{{ r.gridX }}, {{ r.gridY }}]
+                <span class="reg-severity" :class="regionalTypeStyle[r.riskType].text">
+                  {{ r.severity.toFixed(0) }}%
                 </span>
               </div>
-              <div class="reg-body">
-                <div class="reg-stat">
-                  <span>局部墨厚</span>
-                  <strong>{{ (r.localThickness * 100).toFixed(1) }}%</strong>
-                </div>
-                <div class="reg-stat">
-                  <span>偏差</span>
-                  <strong :class="r.deviation > 0 ? 'text-red-600' : 'text-purple-600'">
-                    {{ r.deviation > 0 ? '+' : '' }}{{ (r.deviation * 100).toFixed(1) }}%
-                  </strong>
-                </div>
-                <div class="reg-stat">
-                  <span>影响</span>
-                  <strong>{{ (r.impact * 100).toFixed(1) }}%</strong>
-                </div>
-              </div>
+              <div class="reg-name">{{ r.regionName }}</div>
+              <div class="reg-desc">{{ r.description }}</div>
             </div>
           </div>
-          <div v-if="detailedAnalysis.regionalRisks.length > 12" class="reg-more">
-            ... 还有 {{ detailedAnalysis.regionalRisks.length - 12 }} 处异常区域
+          <div v-if="detailedAnalysis.regionalRisks.length > 8" class="reg-more">
+            ... 还有 {{ detailedAnalysis.regionalRisks.length - 8 }} 处异常区域
           </div>
         </div>
 
@@ -271,7 +259,7 @@ const regionalTypeLabel: Record<string, string> = {
         </div>
 
         <button
-          v-if="store.schemes.length >= 2"
+          v-if="store.savedSchemes.length >= 2"
           class="generate-report-btn"
           @click="store.generateReport"
         >
@@ -685,17 +673,19 @@ const regionalTypeLabel: Record<string, string> = {
 }
 
 .regional-card {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid;
   font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .reg-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
 }
 
 .reg-type {
@@ -703,34 +693,22 @@ const regionalTypeLabel: Record<string, string> = {
   font-size: 11px;
 }
 
-.reg-area {
-  font-size: 10px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-  font-family: monospace;
-}
-
-.reg-body {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-}
-
-.reg-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.reg-stat span {
-  font-size: 9px;
-  color: #94a3b8;
-}
-
-.reg-stat strong {
+.reg-severity {
   font-size: 12px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.reg-name {
+  font-size: 11px;
+  font-weight: 600;
   color: #334155;
+}
+
+.reg-desc {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.4;
 }
 
 .reg-more {

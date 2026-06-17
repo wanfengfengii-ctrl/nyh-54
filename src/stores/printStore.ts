@@ -362,7 +362,20 @@ export const usePrintStore = defineStore('print', () => {
 
   function generateReportFromResult(): DetailedRiskAnalysis | null {
     if (!currentResult.value) return null
-    return generateDetailedRiskAnalysis(currentResult.value, params.value)
+    if (currentResult.value.detailedRisk) return currentResult.value.detailedRisk
+    const r = currentResult.value
+    const heightMap: number[][] = []
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      heightMap.push(new Array(GRID_WIDTH).fill(params.value.heightDiff / 100))
+    }
+    return generateDetailedRiskAnalysis(
+      params.value,
+      r.coverage,
+      r.uniformity,
+      r.averageThickness,
+      r.thicknessMap,
+      heightMap
+    )
   }
 
   function createTemplate(presetName?: string, name?: string): PlateTemplate {
