@@ -845,19 +845,28 @@ export const usePrintStore = defineStore('print', () => {
     if (!validation.valid) return
     params.value = { ...point.adjustedPrintParams }
     lastValidation.value = validation
-    simulate(true)
+    currentResult.value = JSON.parse(JSON.stringify(point.result))
+    if (currentResult.value) {
+      currentResult.value.detailedRisk = generateDetailedRiskAnalysis(
+        params.value,
+        currentResult.value.coverage,
+        currentResult.value.uniformity,
+        currentResult.value.averageThickness,
+        currentResult.value.thicknessMap,
+        currentResult.value.coverageMap
+      )
+    }
   }
 
   function persistAgingAnalyses() {
     try {
-      const toStore = agingAnalyses.value.slice(-5).map(a => ({
+      const toStore = agingAnalyses.value.slice(-3).map(a => ({
         ...a,
-        timeSeries: a.timeSeries.slice(0, 100).map(p => ({
+        timeSeries: a.timeSeries.slice(0, 50).map(p => ({
           ...p,
           result: {
             ...p.result,
-            thicknessMap: undefined,
-            coverageMap: undefined
+            detailedRisk: undefined
           }
         }))
       }))
@@ -872,17 +881,7 @@ export const usePrintStore = defineStore('print', () => {
       const stored = localStorage.getItem('print_aging_analyses')
       if (stored) {
         const loaded = JSON.parse(stored)
-        agingAnalyses.value = loaded.map((a: AgingAnalysisResult) => ({
-          ...a,
-          timeSeries: a.timeSeries.map(p => ({
-            ...p,
-            result: {
-              ...p.result,
-              thicknessMap: Array.from({ length: GRID_HEIGHT }, () => Array(GRID_WIDTH).fill(0)),
-              coverageMap: Array.from({ length: GRID_HEIGHT }, () => Array(GRID_WIDTH).fill(0))
-            }
-          }))
-        }))
+        agingAnalyses.value = loaded
       }
     } catch (e) {
       console.warn('从 localStorage 加载老化分析失败', e)

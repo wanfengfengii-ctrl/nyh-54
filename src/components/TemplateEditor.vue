@@ -286,6 +286,85 @@ function canvasToGrid(e: MouseEvent): { x: number; y: number } {
   return { x, y }
 }
 
+function isPointInRotatedShape(
+  px: number,
+  py: number,
+  shape: PlateShape
+): boolean {
+  const cx = shape.x + shape.width / 2
+  const cy = shape.y + shape.height / 2
+  const angle = (-shape.rotation * Math.PI) / 180
+  const cos = Math.cos(angle)
+  const sin = Math.sin(angle)
+  const dx = px - cx
+  const dy = py - cy
+  const rotatedX = dx * cos - dy * sin + cx
+  const rotatedY = dx * sin + dy * cos + cy
+
+  switch (shape.type) {
+    case 'rectangle':
+    case 'text':
+      return (
+        rotatedX >= shape.x &&
+        rotatedX <= shape.x + shape.width &&
+        rotatedY >= shape.y &&
+        rotatedY <= shape.y + shape.height
+      )
+    case 'circle': {
+      const r = Math.min(shape.width, shape.height) / 2
+      const centerDx = rotatedX - cx
+      const centerDy = rotatedY - cy
+      return centerDx * centerDx + centerDy * centerDy <= r * r
+    }
+    case 'ellipse': {
+      const rx = shape.width / 2
+      const ry = shape.height / 2
+      const centerDx = rotatedX - cx
+      const centerDy = rotatedY - cy
+      return (centerDx * centerDx) / (rx * rx) + (centerDy * centerDy) / (ry * ry) <= 1
+    }
+    case 'polygon': {
+      if (!shape.points || shape.points.length < 3) return false
+      const scaledPoints = shape.points.map(p => ({
+        x: p.x * shape.width + shape.x,
+        y: p.y * shape.height + shape.y
+      }))
+      let inside = false
+      for (let i = 0, j = scaledPoints.length - 1; i < scaledPoints.length; j = i++) {
+        const xi = scaledPoints[i].x, yi = scaledPoints[i].y
+        const xj = scaledPoints[j].x, yj = scaledPoints[j].y
+        const intersect = ((yi > rotatedY) !== (yj > rotatedY)) &&
+          (rotatedX < (xj - xi) * (rotatedY - yi) / (yj - yi) + xi)
+        if (intersect) inside = !inside
+      }
+      return inside
+    }
+    case 'freehand': {
+      if (!shape.points || shape.points.length < 3) return false
+      const scaledPoints = shape.points.map(p => ({
+        x: p.x * shape.width + shape.x,
+        y: p.y * shape.height + shape.y
+      }))
+      let inside = false
+      for (let i = 0, j = scaledPoints.length - 1; i < scaledPoints.length; j = i++) {
+        const xi = scaledPoints[i].x, yi = scaledPoints[i].y
+        const xj = scaledPoints[j].x, yj = scaledPoints[j].y
+        const intersect = ((yi > rotatedY) !== (yj > rotatedY)) &&
+          (rotatedX < (xj - xi) * (rotatedY - yi) / (yj - yi) + xi)
+        if (intersect) inside = !inside
+      }
+      return inside
+    }
+    default:
+      return (
+        rotatedX >= shape.x &&
+        rotatedX <= shape.x + shape.width &&
+        rotatedY >= shape.y &&
+        rotatedY <= shape.y + shape.height
+      )
+  }
+}
+
 function onMouseDown(e: MouseEvent) {
   if (!store.activeTemplate) return
   const pos = canvasToGrid(e)
@@ -310,7 +389,7 @@ function onMouseDown(e: MouseEvent) {
     const shapes = [...store.activeTemplate.shapes].reverse()
     let found: PlateShape | null = null
     for (const s of shapes) {
-      if (gx >= s.x && gx <= s.x + s.width && gy >= s.y && gy <= s.y + s.height) {
+      if (isPointInRotatedShape(gx, gy, s)) {
         found = s
         break
       }

@@ -126,11 +126,18 @@ export interface PlaybackState {
   direction: 'forward' | 'backward'
 }
 
+export interface CustomWeights {
+  coverage: number
+  uniformity: number
+  thickness?: number
+}
+
 export interface BatchExperimentConfig {
   name: string
   baseParams: PrintParams
   variables: BatchVariable[]
   optimizationTarget: OptimizationTarget
+  customWeights?: CustomWeights
 }
 
 export interface BatchVariable {

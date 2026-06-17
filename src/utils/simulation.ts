@@ -714,7 +714,11 @@ export function generatePresetTemplate(presetName: string, templateId: string): 
   return base
 }
 
-export function calculateBatchScore(result: SimulationResult, _target: string): { coverage: number; uniformity: number; balanced: number } {
+export function calculateBatchScore(
+  result: SimulationResult,
+  _target: string,
+  customWeights?: { coverage: number; uniformity: number }
+): { coverage: number; uniformity: number; balanced: number; custom?: number } {
   let coverageScore: number
   if (result.coverage < COVERAGE_THRESHOLDS.tooLow) {
     coverageScore = result.coverage * 0.5
@@ -732,11 +736,20 @@ export function calculateBatchScore(result: SimulationResult, _target: string): 
   const uniformityScore = result.uniformity
   const balancedScore = coverageScore * 0.5 + uniformityScore * 0.5
 
-  return {
+  const scores: { coverage: number; uniformity: number; balanced: number; custom?: number } = {
     coverage: Math.round(coverageScore),
     uniformity: Math.round(uniformityScore),
     balanced: Math.round(balancedScore)
   }
+
+  if (customWeights) {
+    const totalWeight = customWeights.coverage + customWeights.uniformity
+    const normalizedCoverage = customWeights.coverage / totalWeight
+    const normalizedUniformity = customWeights.uniformity / totalWeight
+    scores.custom = Math.round(coverageScore * normalizedCoverage + uniformityScore * normalizedUniformity)
+  }
+
+  return scores
 }
 
 export async function runBatchExperiment(
@@ -806,7 +819,7 @@ export async function runBatchExperiment(
 
     const params = paramCombinations[i]
     const result = runSimulation(params)
-    const score = calculateBatchScore(result, config.optimizationTarget)
+    const score = calculateBatchScore(result, config.optimizationTarget, config.customWeights)
 
     results.push({
       runId: `run_${i}_${Date.now()}`,
@@ -825,8 +838,9 @@ export async function runBatchExperiment(
   let targetKey: keyof BatchRunResult['score'] = 'balanced'
   if (config.optimizationTarget === 'coverage') targetKey = 'coverage'
   else if (config.optimizationTarget === 'uniformity') targetKey = 'uniformity'
+  else if (config.optimizationTarget === 'custom') targetKey = 'custom'
 
-  results.sort((a, b) => b.score[targetKey] - a.score[targetKey])
+  results.sort((a, b) => (b.score[targetKey] ?? 0) - (a.score[targetKey] ?? 0))
   results.forEach((r, idx) => { r.rank = idx + 1 })
 
   const recommendedScheme = results[0]

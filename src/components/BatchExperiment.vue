@@ -14,6 +14,10 @@ const variables = ref<BatchVariable[]>([
 ])
 
 const optimizationTarget = ref<OptimizationTarget>('balanced')
+const customWeights = ref({
+  coverage: 50,
+  uniformity: 50
+})
 const isRunning = ref(false)
 const expandedRunId = ref<string | null>(null)
 
@@ -33,6 +37,8 @@ const targetOptions = [
 
 function openConfigDialog() {
   experimentName.value = `批量实验 ${new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+  optimizationTarget.value = 'balanced'
+  customWeights.value = { coverage: 50, uniformity: 50 }
   showConfigDialog.value = true
 }
 
@@ -72,12 +78,21 @@ async function runExperiment() {
   isRunning.value = true
   showConfigDialog.value = false
 
-  const result = await store.startBatchExperiment({
+  const config: any = {
     name: experimentName.value || '未命名实验',
     baseParams: { ...store.params },
     variables: JSON.parse(JSON.stringify(variables.value)),
     optimizationTarget: optimizationTarget.value
-  })
+  }
+
+  if (optimizationTarget.value === 'custom') {
+    config.customWeights = {
+      coverage: customWeights.value.coverage,
+      uniformity: customWeights.value.uniformity
+    }
+  }
+
+  const result = await store.startBatchExperiment(config)
 
   isRunning.value = false
   if (result) {
@@ -538,6 +553,50 @@ function formatDuration(ms: number): string {
                     <div class="target-desc">{{ t.desc }}</div>
                   </div>
                 </label>
+              </div>
+            </div>
+
+            <div v-if="optimizationTarget === 'custom'" class="form-group custom-weights-group">
+              <label class="form-label">自定义权重配置</label>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-label">覆盖率权重</span>
+                  <span class="weight-value">{{ customWeights.coverage }}%</span>
+                </div>
+                <div class="weight-slider-wrap">
+                  <input
+                    type="range"
+                    v-model.number="customWeights.coverage"
+                    min="0"
+                    max="100"
+                    step="5"
+                    class="weight-slider"
+                  />
+                </div>
+              </div>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-label">均匀度权重</span>
+                  <span class="weight-value">{{ customWeights.uniformity }}%</span>
+                </div>
+                <div class="weight-slider-wrap">
+                  <input
+                    type="range"
+                    v-model.number="customWeights.uniformity"
+                    min="0"
+                    max="100"
+                    step="5"
+                    class="weight-slider"
+                  />
+                </div>
+              </div>
+              <div class="weight-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                权重将自动归一化，当前比例：覆盖率 {{ Math.round(customWeights.coverage / (customWeights.coverage + customWeights.uniformity) * 100) }}% : 均匀度 {{ Math.round(customWeights.uniformity / (customWeights.coverage + customWeights.uniformity) * 100) }}%
               </div>
             </div>
           </div>
@@ -1566,5 +1625,101 @@ function formatDuration(ms: number): string {
   .rec-metrics { justify-content: center; }
   .target-options { grid-template-columns: 1fr; }
   .var-row { grid-template-columns: 1fr; }
+}
+
+.custom-weights-group {
+  margin-top: 12px;
+  padding: 14px;
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+  border-radius: 10px;
+  border: 1px solid #ddd6fe;
+}
+
+.weight-item {
+  margin-bottom: 14px;
+}
+
+.weight-item:last-of-type {
+  margin-bottom: 10px;
+}
+
+.weight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.weight-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5b21b6;
+}
+
+.weight-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c3aed;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-slider-wrap {
+  position: relative;
+}
+
+.weight-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #ddd6fe;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.weight-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 3px solid #7c3aed;
+  border-radius: 50%;
+  cursor: pointer;
+  margin-top: -6px;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+  transition: transform 0.15s;
+}
+
+.weight-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.weight-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 3px solid #7c3aed;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+}
+
+.weight-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #6b21a8;
+  line-height: 1.4;
+}
+
+.weight-note svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 </style>
