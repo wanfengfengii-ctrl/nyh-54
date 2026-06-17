@@ -7,7 +7,6 @@ import { TEMPLATE_PRESETS, GRID_WIDTH, GRID_HEIGHT, LOCAL_HEIGHT_RANGE } from '.
 const store = usePrintStore()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const templateNameInput = ref('')
-const showImportDialog = ref(false)
 const importError = ref('')
 const importSuccess = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)

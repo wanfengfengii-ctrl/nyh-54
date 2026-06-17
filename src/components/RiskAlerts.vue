@@ -213,7 +213,7 @@ const regionalTypeLabel: Record<string, string> = {
           </div>
           <div class="regional-grid">
             <div
-              v-for="(r, ri) in detailedAnalysis.regionalRisks.slice(0, 8)"
+              v-for="(r, _ri) in detailedAnalysis.regionalRisks.slice(0, 8)"
               :key="r.id"
               class="regional-card"
               :class="[regionalTypeStyle[r.riskType].bg, regionalTypeStyle[r.riskType].border]"

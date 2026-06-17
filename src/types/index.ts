@@ -229,3 +229,89 @@ export const PLAYBACK_SPEEDS = [
 
 export const MAX_HISTORY_SIZE = 200
 export const MAX_BATCH_SIZE = 500
+
+export interface EnvironmentParams {
+  temperature: number
+  humidity: number
+  rollerWear: number
+  paperAbsorption: number
+  printRunCount: number
+}
+
+export interface TimeSeriesPoint {
+  index: number
+  timestamp: number
+  envParams: EnvironmentParams
+  adjustedPrintParams: PrintParams
+  result: SimulationResult
+  riskScore: number
+}
+
+export interface AgingAnalysisResult {
+  id: string
+  name: string
+  baseParams: PrintParams
+  baseEnvParams: EnvironmentParams
+  timeSeries: TimeSeriesPoint[]
+  totalSteps: number
+  startTime: number
+  endTime: number
+  coverageTrend: { slope: number; stability: number }
+  uniformityTrend: { slope: number; stability: number }
+  riskTrend: { slope: number; stability: number }
+  abnormalPhases: AbnormalPhase[]
+  qualityAnalysis: QualityAnalysis
+  maintenanceSuggestions: MaintenanceSuggestion[]
+}
+
+export interface AbnormalPhase {
+  id: string
+  startIndex: number
+  endIndex: number
+  type: 'coverage_drop' | 'uniformity_drop' | 'risk_spike' | 'sudden_change'
+  severity: 'mild' | 'moderate' | 'severe'
+  description: string
+  magnitude: number
+  suspectedCause: string
+}
+
+export interface QualityAnalysis {
+  overallStability: number
+  degradationRate: number
+  estimatedRemainingLife: number
+  keyFactors: { factor: string; impact: number; description: string }[]
+  qualityPhases: { name: string; startIndex: number; endIndex: number; quality: 'excellent' | 'good' | 'fair' | 'poor' }[]
+}
+
+export interface MaintenanceSuggestion {
+  id: string
+  priority: 'high' | 'medium' | 'low'
+  category: 'roller' | 'ink' | 'paper' | 'environment' | 'general'
+  title: string
+  description: string
+  suggestedAction: string
+  estimatedImpact: string
+}
+
+export const DEFAULT_ENV_PARAMS: EnvironmentParams = {
+  temperature: 25,
+  humidity: 50,
+  rollerWear: 0,
+  paperAbsorption: 50,
+  printRunCount: 0
+}
+
+export const ENV_PARAMS_RANGES = {
+  temperature: { min: 10, max: 40, step: 0.5, unit: '°C' },
+  humidity: { min: 20, max: 90, step: 1, unit: '%' },
+  rollerWear: { min: 0, max: 100, step: 1, unit: '%' },
+  paperAbsorption: { min: 20, max: 80, step: 1, unit: '%' },
+  printRunCount: { min: 0, max: 10000, step: 100, unit: '次' }
+} as const
+
+export const AGING_SIMULATION_CONFIG = {
+  defaultSteps: 50,
+  minSteps: 10,
+  maxSteps: 200,
+  defaultStepInterval: 100
+} as const

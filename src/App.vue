@@ -10,10 +10,11 @@ import CompareView from './components/CompareView.vue'
 import TemplateEditor from './components/TemplateEditor.vue'
 import ParamHistory from './components/ParamHistory.vue'
 import BatchExperiment from './components/BatchExperiment.vue'
+import AgingAnalysis from './components/AgingAnalysis.vue'
 
 const store = usePrintStore()
 type LeftTabType = 'params' | 'template' | 'history'
-type CenterTabType = 'canvas' | 'charts' | 'experiment'
+type CenterTabType = 'canvas' | 'charts' | 'experiment' | 'aging'
 type RightTabType = 'risk' | 'scheme'
 
 const leftTab = ref<LeftTabType>('params')
@@ -26,7 +27,7 @@ onMounted(() => {
 
 watch(() => store.params, () => {
   if (store.currentResult) {
-    store.recordHistory()
+    store.recordHistory(store.currentResult)
   }
 }, { deep: true })
 </script>
@@ -85,6 +86,20 @@ watch(() => store.params, () => {
             <span>批量实验</span>
             <span v-if="store.experiments.length" class="tab-badge">
               {{ store.experiments.length }}
+            </span>
+          </button>
+          <button
+            class="center-tab"
+            :class="{ active: centerTab === 'aging' }"
+            @click="centerTab = 'aging'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>老化分析</span>
+            <span v-if="store.agingAnalyses.length" class="tab-badge" style="background: #7c3aed;">
+              {{ store.agingAnalyses.length }}
             </span>
           </button>
         </div>
@@ -158,6 +173,9 @@ watch(() => store.params, () => {
           <div v-show="centerTab === 'experiment'" class="tab-content">
             <BatchExperiment />
           </div>
+          <div v-show="centerTab === 'aging'" class="tab-content">
+            <AgingAnalysis />
+          </div>
         </section>
 
         <aside class="right-panel">
@@ -221,6 +239,12 @@ watch(() => store.params, () => {
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
             <span>{{ store.experiments.length }} 实验</span>
+            <span class="sep">·</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>{{ store.agingAnalyses.length }} 老化</span>
           </div>
         </div>
         <span class="footer-hint">基于 Vue3 + TypeScript + Pinia + Canvas + ECharts 构建</span>

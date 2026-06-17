@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { usePrintStore } from '../stores/printStore'
-import { PLAYBACK_SPEEDS, type ParamHistoryEntry } from '../types'
+import { PLAYBACK_SPEEDS } from '../types'
 
 const store = usePrintStore()
 const expandedId = ref<string | null>(null)

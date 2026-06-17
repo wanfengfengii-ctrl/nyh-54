@@ -11,7 +11,11 @@ import type {
   PlaybackState,
   BatchExperimentConfig,
   BatchExperimentResult,
-  ComparisonReport
+  ComparisonReport,
+  EnvironmentParams,
+  AgingAnalysisResult,
+  TimeSeriesPoint,
+  DetailedRiskAnalysis
 } from '../types'
 import {
   DEFAULT_PARAMS,
@@ -19,7 +23,9 @@ import {
   TEMPLATE_PRESETS,
   MAX_HISTORY_SIZE,
   GRID_WIDTH,
-  GRID_HEIGHT
+  GRID_HEIGHT,
+  DEFAULT_ENV_PARAMS,
+  AGING_SIMULATION_CONFIG
 } from '../types'
 import {
   runSimulation,
@@ -32,7 +38,8 @@ import {
   runBatchExperiment,
   generateComparisonReport,
   exportReportAsText,
-  generateDetailedRiskAnalysis
+  generateDetailedRiskAnalysis,
+  runAgingAnalysis
 } from '../utils/simulation'
 
 export const usePrintStore = defineStore('print', () => {
@@ -63,6 +70,22 @@ export const usePrintStore = defineStore('print', () => {
   const activeExperimentId = ref<string | null>(null)
   const experimentProgress = ref<{ completed: number; total: number } | null>(null)
   const experimentCancelled = ref(false)
+
+  const envParams = ref<EnvironmentParams>({ ...DEFAULT_ENV_PARAMS })
+  const agingAnalyses = ref<AgingAnalysisResult[]>([])
+  const activeAgingId = ref<string | null>(null)
+  const agingPlaybackIndex = ref<number>(-1)
+  const agingPlaybackState = ref<PlaybackState>({
+    isPlaying: false,
+    isPaused: false,
+    currentIndex: -1,
+    speed: 500,
+    direction: 'forward'
+  })
+  let agingPlaybackTimer: number | null = null
+  const agingSteps = ref<number>(AGING_SIMULATION_CONFIG.defaultSteps)
+  const agingProgress = ref<{ completed: number; total: number } | null>(null)
+  const agingRunning = ref(false)
 
   const shouldRecompute = computed(() => {
     if (!lastParams.value) return true
@@ -95,6 +118,19 @@ export const usePrintStore = defineStore('print', () => {
   const activeExperiment = computed<BatchExperimentResult | null>(() => {
     if (!activeExperimentId.value) return null
     return experiments.value.find(e => e.id === activeExperimentId.value) ?? null
+  })
+
+  const activeAgingAnalysis = computed<AgingAnalysisResult | null>(() => {
+    if (!activeAgingId.value) return null
+    return agingAnalyses.value.find(a => a.id === activeAgingId.value) ?? null
+  })
+
+  const currentAgingPoint = computed<TimeSeriesPoint | null>(() => {
+    const analysis = activeAgingAnalysis.value
+    if (!analysis || agingPlaybackIndex.value < 0 || agingPlaybackIndex.value >= analysis.timeSeries.length) {
+      return null
+    }
+    return analysis.timeSeries[agingPlaybackIndex.value]
   })
 
   function validateSingleParam(key: keyof PrintParams, value: number): string | null {
@@ -190,7 +226,6 @@ export const usePrintStore = defineStore('print', () => {
   }
 
   function setParams(newParams: Partial<PrintParams>, skipHistory = false) {
-    const oldParams = skipHistory ? null : lastParams.value
     Object.assign(params.value, newParams)
     lastValidation.value = validateParams(params.value)
     if (lastValidation.value.valid) {
@@ -658,6 +693,202 @@ export const usePrintStore = defineStore('print', () => {
     activeExperimentId.value = experimentId
   }
 
+  function updateEnvParam(key: keyof EnvironmentParams, value: number) {
+    envParams.value[key] = value
+  }
+
+  function resetEnvParams() {
+    envParams.value = { ...DEFAULT_ENV_PARAMS }
+  }
+
+  function setAgingSteps(steps: number) {
+    const min = AGING_SIMULATION_CONFIG.minSteps
+    const max = AGING_SIMULATION_CONFIG.maxSteps
+    agingSteps.value = Math.max(min, Math.min(max, Math.round(steps)))
+  }
+
+  async function startAgingAnalysis(): Promise<AgingAnalysisResult | null> {
+    if (!lastValidation.value.valid) return null
+    agingRunning.value = true
+    agingProgress.value = { completed: 0, total: agingSteps.value }
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 50))
+      const tpl = activeTemplate.value
+      const result = runAgingAnalysis(
+        params.value,
+        envParams.value,
+        agingSteps.value,
+        tpl
+      )
+
+      agingAnalyses.value.push(result)
+      activeAgingId.value = result.id
+      agingPlaybackIndex.value = 0
+      agingPlaybackState.value.currentIndex = 0
+      persistAgingAnalyses()
+
+      agingProgress.value = { completed: agingSteps.value, total: agingSteps.value }
+      return result
+    } catch (e) {
+      console.error('Aging analysis failed:', e)
+      return null
+    } finally {
+      agingRunning.value = false
+      agingProgress.value = null
+    }
+  }
+
+  function setActiveAgingAnalysis(agingId: string | null) {
+    activeAgingId.value = agingId
+    if (agingId) {
+      agingPlaybackIndex.value = 0
+      agingPlaybackState.value.currentIndex = 0
+    } else {
+      agingPlaybackIndex.value = -1
+      agingPlaybackState.value.currentIndex = -1
+    }
+    stopAgingPlayback()
+  }
+
+  function deleteAgingAnalysis(agingId: string) {
+    agingAnalyses.value = agingAnalyses.value.filter(a => a.id !== agingId)
+    if (activeAgingId.value === agingId) {
+      activeAgingId.value = null
+      agingPlaybackIndex.value = -1
+    }
+    stopAgingPlayback()
+    persistAgingAnalyses()
+  }
+
+  function jumpToAgingIndex(index: number) {
+    const analysis = activeAgingAnalysis.value
+    if (!analysis) return
+    const clamped = Math.max(0, Math.min(analysis.timeSeries.length - 1, index))
+    agingPlaybackIndex.value = clamped
+    agingPlaybackState.value.currentIndex = clamped
+  }
+
+  function startAgingPlayback() {
+    const analysis = activeAgingAnalysis.value
+    if (!analysis || analysis.timeSeries.length < 2) return
+    stopAgingPlayback()
+    agingPlaybackState.value.isPlaying = true
+    agingPlaybackState.value.isPaused = false
+
+    if (agingPlaybackIndex.value < 0 || agingPlaybackIndex.value >= analysis.timeSeries.length - 1) {
+      agingPlaybackIndex.value = agingPlaybackState.value.direction === 'forward'
+        ? 0
+        : analysis.timeSeries.length - 1
+    }
+
+    const tick = () => {
+      if (!agingPlaybackState.value.isPlaying || agingPlaybackState.value.isPaused) return
+      const idx = agingPlaybackIndex.value
+      const next = agingPlaybackState.value.direction === 'forward'
+        ? idx + 1
+        : idx - 1
+      if (next < 0 || next >= analysis.timeSeries.length) {
+        stopAgingPlayback()
+        return
+      }
+      jumpToAgingIndex(next)
+      agingPlaybackTimer = window.setTimeout(tick, agingPlaybackState.value.speed)
+    }
+    agingPlaybackTimer = window.setTimeout(tick, agingPlaybackState.value.speed)
+  }
+
+  function pauseAgingPlayback() {
+    agingPlaybackState.value.isPaused = true
+  }
+
+  function resumeAgingPlayback() {
+    if (!agingPlaybackState.value.isPlaying) return
+    const analysis = activeAgingAnalysis.value
+    if (!analysis) return
+    agingPlaybackState.value.isPaused = false
+    const tick = () => {
+      if (!agingPlaybackState.value.isPlaying || agingPlaybackState.value.isPaused) return
+      const idx = agingPlaybackIndex.value
+      const next = agingPlaybackState.value.direction === 'forward'
+        ? idx + 1
+        : idx - 1
+      if (next < 0 || next >= analysis.timeSeries.length) {
+        stopAgingPlayback()
+        return
+      }
+      jumpToAgingIndex(next)
+      agingPlaybackTimer = window.setTimeout(tick, agingPlaybackState.value.speed)
+    }
+    agingPlaybackTimer = window.setTimeout(tick, agingPlaybackState.value.speed)
+  }
+
+  function stopAgingPlayback() {
+    agingPlaybackState.value.isPlaying = false
+    agingPlaybackState.value.isPaused = false
+    if (agingPlaybackTimer) {
+      clearTimeout(agingPlaybackTimer)
+      agingPlaybackTimer = null
+    }
+  }
+
+  function setAgingPlaybackSpeed(speed: number) {
+    agingPlaybackState.value.speed = speed
+  }
+
+  function setAgingPlaybackDirection(dir: 'forward' | 'backward') {
+    agingPlaybackState.value.direction = dir
+  }
+
+  function applyAgingPointParams(point: TimeSeriesPoint) {
+    const validation = validateParams(point.adjustedPrintParams)
+    if (!validation.valid) return
+    params.value = { ...point.adjustedPrintParams }
+    lastValidation.value = validation
+    simulate(true)
+  }
+
+  function persistAgingAnalyses() {
+    try {
+      const toStore = agingAnalyses.value.slice(-5).map(a => ({
+        ...a,
+        timeSeries: a.timeSeries.slice(0, 100).map(p => ({
+          ...p,
+          result: {
+            ...p.result,
+            thicknessMap: undefined,
+            coverageMap: undefined
+          }
+        }))
+      }))
+      localStorage.setItem('print_aging_analyses', JSON.stringify(toStore))
+    } catch (e) {
+      console.warn('保存老化分析到 localStorage 失败', e)
+    }
+  }
+
+  function loadPersistedAgingAnalyses() {
+    try {
+      const stored = localStorage.getItem('print_aging_analyses')
+      if (stored) {
+        const loaded = JSON.parse(stored)
+        agingAnalyses.value = loaded.map((a: AgingAnalysisResult) => ({
+          ...a,
+          timeSeries: a.timeSeries.map(p => ({
+            ...p,
+            result: {
+              ...p.result,
+              thicknessMap: Array.from({ length: GRID_HEIGHT }, () => Array(GRID_WIDTH).fill(0)),
+              coverageMap: Array.from({ length: GRID_HEIGHT }, () => Array(GRID_WIDTH).fill(0))
+            }
+          }))
+        }))
+      }
+    } catch (e) {
+      console.warn('从 localStorage 加载老化分析失败', e)
+    }
+  }
+
   function persistSchemes() {
     try {
       localStorage.setItem('print_schemes', JSON.stringify(savedSchemes.value))
@@ -779,6 +1010,7 @@ export const usePrintStore = defineStore('print', () => {
     loadPersistedTemplates()
     loadPersistedHistory()
     loadPersistedExperiments()
+    loadPersistedAgingAnalyses()
     lastValidation.value = validateParams(params.value)
     if (lastValidation.value.valid) {
       simulate(true)
@@ -844,6 +1076,31 @@ export const usePrintStore = defineStore('print', () => {
     deleteExperiment,
     applyExperimentScheme,
     setActiveExperiment,
+    recordHistory,
+    envParams,
+    agingAnalyses,
+    activeAgingId,
+    activeAgingAnalysis,
+    currentAgingPoint,
+    agingPlaybackIndex,
+    agingPlaybackState,
+    agingSteps,
+    agingProgress,
+    agingRunning,
+    updateEnvParam,
+    resetEnvParams,
+    setAgingSteps,
+    startAgingAnalysis,
+    setActiveAgingAnalysis,
+    deleteAgingAnalysis,
+    jumpToAgingIndex,
+    startAgingPlayback,
+    pauseAgingPlayback,
+    resumeAgingPlayback,
+    stopAgingPlayback,
+    setAgingPlaybackSpeed,
+    setAgingPlaybackDirection,
+    applyAgingPointParams,
     init
   }
 })

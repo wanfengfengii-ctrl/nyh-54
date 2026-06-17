@@ -89,8 +89,10 @@ function applyRun(run: BatchRunResult) {
   store.applyExperimentScheme(run.params)
 }
 
-function paramLabel(key: string): string {
-  return paramOptions.find(p => p.key === key)?.label || key
+function handleDeleteExperiment() {
+  if (window.confirm('确定删除该实验？') && store.activeExperiment) {
+    store.deleteExperiment(store.activeExperiment.id)
+  }
 }
 
 function getColorClass(v: number): string {
@@ -220,7 +222,7 @@ function formatDuration(ms: number): string {
         </div>
         <button
           class="icon-btn danger"
-          @click="() => { if(confirm('确定删除该实验？')) store.deleteExperiment(store.activeExperiment!.id) }"
+          @click="handleDeleteExperiment"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3 6 5 6 21 6" />
